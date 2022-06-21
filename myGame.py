@@ -1,7 +1,7 @@
 
 import pygame
 
-WIDTH, HEIGHT = 1400, 900
+WIDTH, HEIGHT = 700, 500
 # creating the display surface
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("DVD simulator")
@@ -73,11 +73,11 @@ FPS = 120
 
 
 # Events:
+# (this uses pygames event handler)
 
 #pressed_keys = pygame.key.get_presseed()    #gives you a boolean map, that maps all possible keys to false (not pressed at the moment) or true (pressed at the moment)
 # pygame.K_a    # this is how the key a is represented in the map
 
-# this uses pygames event handler:
 # event.type == pygame.KEYDOWN    returns true, if any key has been pressed down (so we can put all the other pygame.K_something in an if and don't check all of them, if none has been pressed)
 # event.key == pygame.K_a    retrns true, if the key (in this case a) has been pressed down. But doesn't remain true, while the key is down.
 
@@ -124,13 +124,37 @@ FPS = 120
 
 
 
-import os
 
-DVD_POS = [100, 100]
+
+
+
+import os
+import math
+import random
+import moviepy.editor
+
+
+
+DVD_START_POS = [100, 100]
 DVD_WIDTH = 200
-VELOCITY = 0.000002
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
+
+CORNER_MARGIN = 5
+
+VELOCITY_SIZE = 250 / FPS
+
+INIT_ANGLE = random.gauss(0, math.pi/2)
+print(INIT_ANGLE)
+
+START_VELOCITY = [VELOCITY_SIZE * math.cos(INIT_ANGLE), VELOCITY_SIZE * math.sin(INIT_ANGLE)]
+
+KEY_VELOCITY_CHANGE_PER_SECOND = [2 / FPS, 2 / FPS]    # x and y direction
+
+VELOCITY_UPPER_BOUND = [700 / FPS, 700 /FPS] # largest absolute value allowed in the x and y directions
+# VELOCITY_LOWER_BOUND = [75 / FPS, 75 / FPS]    # smallest -||-
+VELOCITY_LOWER_BOUND = [0 / FPS, 0 / FPS]    # smallest -||-
+
 
 
 DVD_RAW = pygame.image.load(os.path.join("Slike", "dvd.jpg"))
@@ -141,12 +165,19 @@ DVD = pygame.transform.scale(DVD_RAW, (DVD_WIDTH, ((DVD_WIDTH / DVD_RAW.get_widt
 
 
 
-def draw_frame():
+def draw_frame(DVD_POS):
     #here we put whatever we want to blit to the window before ve update
     WIN.fill(BLACK)
     WIN.blit(DVD, (DVD_POS[0], DVD_POS[1]))
     # updating the whole display surface - simply shows in the window what display looks like at the moment (what are it's pixels currently)
     pygame.display.update()
+
+def hamsterRave():
+    pygame.init()    #I think this is often not even needed.
+    video = moviepy.editor.VideoFileClip(os.path.join("Slike", "Hamster Rave.mp4"))
+    video_resized = video.resize(height=900)
+    video_resized.preview()
+    pygame.quit()
 
 
 
@@ -154,22 +185,99 @@ def main():
     clock = pygame.time.Clock()
     run = True
 
-    dvd_vel_x = (WIDTH * VELOCITY)
-    dvd_vel_y = (HEIGHT * VELOCITY)
+    DVD_POS = DVD_START_POS
+    velocity = START_VELOCITY
 
     while run:
         clock.tick(FPS)     # Returns how many seconds have passed since the last clock.tick call.
                             # If you pass a number (FPS) to it, it will return only if 1000/FPS miliseconds have passed since the last call 
                             # For some reason FPS needs to be an integer.
 
-        DVD_POS[0] += dvd_vel_x
-        DVD_POS[1] += dvd_vel_y
+        DVD_POS[0] += velocity[0]
+        DVD_POS[1] += velocity[1]
+
+        # changing velocity with keys with upper bounding
+
+        # x direction
+
+        pressed_keys = pygame.key.get_pressed()
+        if (pressed_keys[pygame.K_RIGHT] and velocity[0] < VELOCITY_UPPER_BOUND[0]):
+            velocity[0] += (KEY_VELOCITY_CHANGE_PER_SECOND[0])
+            
+        if pressed_keys[pygame.K_LEFT] and velocity[0] > -VELOCITY_UPPER_BOUND[0]:
+            velocity[0] -= (KEY_VELOCITY_CHANGE_PER_SECOND[0])
+
+        # y direction
+
+        if pressed_keys[pygame.K_DOWN] and velocity[1] < VELOCITY_UPPER_BOUND[1]:
+            velocity[1] += (KEY_VELOCITY_CHANGE_PER_SECOND[1])
+        
+        if pressed_keys[pygame.K_UP] and velocity[1]< VELOCITY_UPPER_BOUND[1]:
+            velocity[1] -= (KEY_VELOCITY_CHANGE_PER_SECOND[1])
+
+
+
+
+        # velocity lower bounding
+        if velocity[0] > 0 and velocity[0] < VELOCITY_LOWER_BOUND[0]:
+            velocity[0] = VELOCITY_LOWER_BOUND[0]
+
+        if velocity[0] < 0 and velocity[0]> -VELOCITY_LOWER_BOUND[0]:
+            velocity[0] = -VELOCITY_LOWER_BOUND[0]
+
+        if velocity[1] > 0 and velocity[1] < VELOCITY_LOWER_BOUND[1]:
+            velocity[1] = VELOCITY_LOWER_BOUND[1]
+        
+        if velocity[1] < 0 and velocity[1] > -VELOCITY_LOWER_BOUND[1]:
+            velocity[1] = -VELOCITY_LOWER_BOUND[1]
+        
+
+
+
+
+        # wall collision detection and bounce and correction of overlap in the collision
+
+        if(DVD_POS[0] + DVD.get_width() >= WIDTH):
+            DVD_POS[0] = WIDTH - DVD.get_width()
+            velocity[0] = -abs(velocity[0])
+        
+        if(DVD_POS[0] <= 0):
+            DVD_POS[0] = 0
+            velocity[0] = abs(velocity[0])
+
+        if(DVD_POS[1] <= 0):
+            DVD_POS[1] = 0
+            velocity[1] = abs(velocity[1])
+        
+        if(DVD_POS[1] + DVD.get_height() >= HEIGHT):
+            DVD_POS[1] = HEIGHT - DVD.get_height()
+            velocity[1] = -abs(velocity[1])
+
+
+        
+        
+        # corner checking
+        is_in_corner = (abs(DVD_POS[0]) <= CORNER_MARGIN or abs(DVD_POS[0] + DVD.get_width() - WIDTH) <= CORNER_MARGIN) and (abs(DVD_POS[1]) <= CORNER_MARGIN or abs( DVD_POS[1] + DVD.get_height() - HEIGHT) <= CORNER_MARGIN)
+        if(is_in_corner):
+            hamsterRave()
+
+
+
+
+
+
+
+
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
+            
+            
 
-        draw_frame()
+            
+
+        draw_frame(DVD_POS)
         
         
     
